@@ -17,10 +17,8 @@ class Grid:
         # (row, col)
         self.selected = None
         self.cells = [[Cell(i, j, width, height, self.board[i][j], rows) for j in range(cols)] for i in range(rows)]
-        self.model = None
         self.started = False
         self.completed = False
-        self.update_model()
         if (self.mine_count == 0): self.mine_count = (self.rows * self.cols) // 6
         self.place_mines()
 
@@ -48,7 +46,11 @@ class Grid:
     def dig(self):
         r = self.selected[0]
         c = self.selected[1]
-        self.dig_neighbors((r,c))
+        self.cells[r][c].isHidden = False
+        if not(self.cells[r][c].isMine):
+            self.dig_neighbors((r,c))
+        else:
+            self.cells[r][c].isTriggered = True
 
 
     # Digs extra neighbors if they are not near a mine
@@ -59,14 +61,14 @@ class Grid:
             if (self.cells[r][c].isMine == False and self.cells[r][c].isHidden == True):
                 self.cells[r][c].isHidden = False
                 if (self.cells[r][c].value == 0):
-                    self.dig_initial((r+1, c))
-                    self.dig_initial((r+1, c+1))
-                    self.dig_initial((r, c+1))
-                    self.dig_initial((r-1, c))
-                    self.dig_initial((r-1, c-1))
-                    self.dig_initial((r, c-1))
-                    self.dig_initial((r-1, c+1))
-                    self.dig_initial((r+1, c-1))
+                    self.dig_neighbors((r+1, c))
+                    self.dig_neighbors((r+1, c+1))
+                    self.dig_neighbors((r, c+1))
+                    self.dig_neighbors((r-1, c))
+                    self.dig_neighbors((r-1, c-1))
+                    self.dig_neighbors((r, c-1))
+                    self.dig_neighbors((r-1, c+1))
+                    self.dig_neighbors((r+1, c-1))
 
 
     def flag(self):
@@ -128,10 +130,6 @@ class Grid:
                 c += 1
             self.check_neighbors((r, c))
 
-
-    def update_model(self):
-        self.model = [[self.cells[i][j].value for j in range(self.cols)] for i in range(self.rows)]
-
     def place_mines(self):
         count = 0
         while count < self.mine_count:
@@ -161,9 +159,9 @@ class Grid:
     def click(self, pos):
         if (pos[0] < self.width and pos[1] < self.height):
             gap = self.width / self.rows
-            x = pos[0] // gap
-            y = pos[1] // gap
-            return (x, y)
+            r = pos[0] // gap
+            c = pos[1] // gap
+            return (r, c)
         return None
 
     def select(self, col, row):
@@ -185,6 +183,33 @@ class Grid:
             for j in range(self.cols):
                 if (self.cells[i][j].isMine == True and self.cells[i][j].isHidden == False): return True
         return False
+
+    def is_solved(self, pos):
+        r = pos[0]
+        c = pos[1]
+        if self.cells[r+1][c].isHidden == True:
+            return False
+        if self.cells[r+1][c+1].isHidden == True:
+            return False
+        if self.cells[r][c+1].isHidden == True:
+            return False
+        if self.cells[r-1][c].isHidden == True:
+            return False
+        if self.cells[r-1][c-1].isHidden == True:
+            return False
+        if self.cells[r][c-1].isHidden == True:
+            return False
+        if self.cells[r-1][c+1].isHidden == True:
+            return False        
+        if self.cells[r+1][c-1].isHidden == True:
+            return False              
+
+    def is_valid(self, pos):
+        r = pos[0]
+        c = pos[1]
+        if r < self.rows and c < self.cols and r >= 0 and c >= 0:
+            return True
+        return False
         
 
 
@@ -196,12 +221,25 @@ class Cell:
         self.width = width 
         self.height = height
         self.value = 0
+        self.revealed = 0
         self.rows = rows
         self.isMine = False
         self.isHidden = True
         self.isFlagged = False
+        self.isTriggered = False
         self.selected = False
         self.GameOver = False
+        self.colors = {
+            0 : (255,255,255),
+            1 : (0,0,255),
+            2 : (0,255,0),
+            3 : (255,0,0),
+            4 : (0,0,139),
+            5 : (150,75,0),
+            6 : (0,255,255),
+            7 : (0,0,0),
+            8 : (128,128,128)
+        }
 
     def draw(self, win):
         fnt = pygame.font.SysFont("arial", 40)
@@ -210,22 +248,35 @@ class Cell:
         x = self.col * gap
         y = self.row * gap
 
-        if (self.selected):
-            color = (255,0,0)
-            pygame.draw.rect(win, color, pygame.Rect(x, y, gap, gap),  2)
 
-        if self.isMine == 1 and self.GameOver:
+        color = self.colors[self.value]
+
+        if self.isMine == 1 and self.isTriggered:
+            mine = pygame.image.load('assets/triggered_mine.png')
+            mine = pygame.transform.scale(mine, (gap, gap))
+            #text = fnt.render(str("B"), 1,  color)
+            win.blit(mine, (x, y))
+        elif self.isMine == 1 and self.GameOver:
             mine = pygame.image.load('assets/mine.png')
             mine = pygame.transform.scale(mine, (gap, gap))
-            text = fnt.render(str("B"), 1,  (255,0,0))
+            #text = fnt.render(str("B"), 1,  color)
             win.blit(mine, (x, y))
         elif self.isFlagged == 1:
             flag = pygame.image.load('assets/flag.png')
             flag = pygame.transform.scale(flag, (gap-10, gap-10))
             win.blit(flag, (x+5, y+5))
-        elif self.isHidden == False:
-            text = fnt.render(str(self.value), 1, (128,128,128))
+        elif self.isHidden == False and self.value > 0:           
+            text = fnt.render(str(self.value), 1, color)
             win.blit(text, (x + (gap/2 - text.get_width()/2), y + (gap/2 - text.get_height()/2)))
+        elif self.isHidden == True:
+            empty_block = pygame.image.load('assets/empty-block.png')
+            empty_block = pygame.transform.scale(empty_block, (gap, gap))
+            text = fnt.render(str(self.value), 1, color)
+            win.blit(empty_block, (x, y))
+
+        if (self.selected):
+            color = (255,0,0)
+            pygame.draw.rect(win, color, pygame.Rect(x, y, gap, gap),  2)
 
 
 def format_time(secs):
@@ -236,7 +287,7 @@ def format_time(secs):
     return time_string
 
 def redraw_window(win, board, time):
-    win.fill((255,255,255))
+    win.fill((128,128,128))
     # Draw time
     fnt = pygame.font.SysFont("arial", 40)
     text = fnt.render("Time: " + format_time(time), 1, (0,0,0))
@@ -257,10 +308,9 @@ def main(argv):
     rows = int(sys.argv[1])
     cols = int(sys.argv[2])
     pygame.init()
-    pygame.font.init()
     win = pygame.display.set_mode((540,600))
     board = Grid(rows, cols, 540, 540, win)
-    pygame.display.set_caption = "Minesweeper"
+    pygame.display.set_caption = 'Minesweeper'
     key = None
     run = True
     end = False
