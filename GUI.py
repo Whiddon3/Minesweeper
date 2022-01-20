@@ -1,4 +1,6 @@
 import pygame
+import pygame_widgets
+from pygame_widgets.button import Button
 from pygame.locals import *
 import time
 import random 
@@ -16,7 +18,9 @@ class Grid:
         
         # (row, col)
         self.selected = None
+        self.hinted = False
         self.cells = [[Cell(i, j, width, height, self.board[i][j], rows) for j in range(cols)] for i in range(rows)]
+        self.incomplete = set()
         self.started = False
         self.completed = False
         if (self.mine_count == 0): self.mine_count = (self.rows * self.cols) // 6
@@ -51,15 +55,30 @@ class Grid:
             self.dig_neighbors((r,c))
         else:
             self.cells[r][c].isTriggered = True
+        for i in range(self.rows):
+            for j in range(self.cols):
+                if (self.cells[i][j].isHint): 
+                    self.cells[i][j].isHint = False
+                    self.hinted = False
 
 
     # Digs extra neighbors if they are not near a mine
     def dig_neighbors(self, pos):
         r = pos[0]
         c = pos[1]
+        if self.is_valid(pos) and not(self.cells[r][c].isHidden) and self.unmarked_neighbors(self.cells[r][c]) > 0: 
+            self.incomplete.add(self.cells[r][c])
+        elif self.is_valid(pos) and self.unmarked_neighbors(self.cells[r][c]) == 0 and pos in self.incomplete:
+            self.incomplete.remove((r,c))
         if (r < self.rows and c < self.cols and r >= 0 and c >= 0):
             if (self.cells[r][c].isMine == False and self.cells[r][c].isHidden == True):
+                if self.unmarked_neighbors(self.cells[r][c]) > 0 and self.cells[r][c].value > 0: 
+                    self.incomplete.add(self.cells[r][c])
+                elif self.unmarked_neighbors(self.cells[r][c]) == 0 and pos in self.incomplete:
+                    self.incomplete.remove((r,c))      
+                             
                 self.cells[r][c].isHidden = False
+
                 if (self.cells[r][c].value == 0):
                     self.dig_neighbors((r+1, c))
                     self.dig_neighbors((r+1, c+1))
@@ -77,6 +96,11 @@ class Grid:
         if (self.cells[r][c].isHidden == True):
             self.cells[r][c].isFlagged = not(self.cells[r][c].isFlagged)
     
+    def highlight(self, cell):
+        r = cell.row
+        c = cell.col
+        self.cells[r][c].isHint = True
+        self.hinted = True
             
 
     def dig_initial(self, pos):
@@ -84,6 +108,10 @@ class Grid:
         c = pos[1]
         if (r < self.rows and c < self.cols and r >= 0 and c >= 0):
             if (self.cells[r][c].isMine == False and self.cells[r][c].isHidden == True):
+                if self.unmarked_neighbors(self.cells[r][c]) > 0 and self.cells[r][c].value > 0: 
+                    self.incomplete.add(self.cells[r][c])
+                elif self.unmarked_neighbors(self.cells[r][c]) == 0 and pos in self.incomplete:
+                    self.incomplete.remove((r,c))
                 self.cells[r][c].isHidden = False
                 if (self.cells[r][c].value == 0 or self.started == False):
                     self.started = True
@@ -187,21 +215,21 @@ class Grid:
     def is_solved(self, pos):
         r = pos[0]
         c = pos[1]
-        if self.cells[r+1][c].isHidden == True:
+        if self.is_valid((r+1,c)) and self.cells[r+1][c].isHidden == True:
             return False
-        if self.cells[r+1][c+1].isHidden == True:
+        if self.is_valid((r+1,c+1)) and self.cells[r+1][c+1].isHidden == True:
             return False
-        if self.cells[r][c+1].isHidden == True:
+        if self.is_valid((r,c+1)) and self.cells[r][c+1].isHidden == True:
             return False
-        if self.cells[r-1][c].isHidden == True:
+        if self.is_valid((r-1,c)) and self.cells[r-1][c].isHidden == True:
             return False
-        if self.cells[r-1][c-1].isHidden == True:
+        if self.is_valid((r-1,c-1)) and self.cells[r-1][c-1].isHidden == True:
             return False
-        if self.cells[r][c-1].isHidden == True:
+        if self.is_valid((r,c-1)) and self.cells[r][c-1].isHidden == True:
             return False
-        if self.cells[r-1][c+1].isHidden == True:
+        if self.is_valid((r-1,c+1)) and self.cells[r-1][c+1].isHidden == True:
             return False        
-        if self.cells[r+1][c-1].isHidden == True:
+        if self.is_valid((r+1,c-1)) and self.cells[r+1][c-1].isHidden == True:
             return False              
 
     def is_valid(self, pos):
@@ -210,6 +238,71 @@ class Grid:
         if r < self.rows and c < self.cols and r >= 0 and c >= 0:
             return True
         return False
+
+    def unmarked_neighbors_helper(self, pos):
+        r = pos[0]
+        c = pos[1]
+        # Formatted this way for visibility
+        if self.is_valid((r,c)):
+            if self.cells[r][c].isHidden:
+                if self.cells[r][c].isFlagged == False:
+                    return True
+        return False
+    
+    def unmarked_neighbors(self, cell):
+        r = cell.row
+        c = cell.col
+        total = 0
+        if self.unmarked_neighbors_helper((r+1, c)):
+            total += 1
+        if self.unmarked_neighbors_helper((r+1, c+1)):
+            total += 1
+        if self.unmarked_neighbors_helper((r, c+1)):
+            total += 1
+        if self.unmarked_neighbors_helper((r-1, c)):
+            total += 1
+        if self.unmarked_neighbors_helper((r-1, c-1)):
+            total += 1
+        if self.unmarked_neighbors_helper((r, c-1)):
+            total += 1
+        if self.unmarked_neighbors_helper((r-1, c+1)):
+            total += 1
+        if self.unmarked_neighbors_helper((r+1, c-1)):
+            total += 1
+        return total
+
+
+    def flagged_neighbors_helper(self, pos):
+        r = pos[0]
+        c = pos[1]
+        # Formatted this way for visibility
+        if self.is_valid((r,c)):
+            if self.cells[r][c].isHidden:
+                if self.cells[r][c].isFlagged:
+                    return True
+        return False
+
+    def flagged_neighbors(self, cell):
+        r = cell.row
+        c = cell.col
+        total = 0
+        if self.flagged_neighbors_helper((r+1, c)):
+            total += 1
+        if self.flagged_neighbors_helper((r+1, c+1)):
+            total += 1
+        if self.flagged_neighbors_helper((r, c+1)):
+            total += 1
+        if self.flagged_neighbors_helper((r-1, c)):
+            total += 1
+        if self.flagged_neighbors_helper((r-1, c-1)):
+            total += 1
+        if self.flagged_neighbors_helper((r, c-1)):
+            total += 1
+        if self.flagged_neighbors_helper((r-1, c+1)):
+            total += 1
+        if self.flagged_neighbors_helper((r+1, c-1)):
+            total += 1
+        return total
         
 
 
@@ -221,12 +314,12 @@ class Cell:
         self.width = width 
         self.height = height
         self.value = 0
-        self.revealed = 0
         self.rows = rows
         self.isMine = False
         self.isHidden = True
         self.isFlagged = False
         self.isTriggered = False
+        self.isHint = False
         self.selected = False
         self.GameOver = False
         self.colors = {
@@ -277,6 +370,23 @@ class Cell:
         if (self.selected):
             color = (255,0,0)
             pygame.draw.rect(win, color, pygame.Rect(x, y, gap, gap),  2)
+        if (self.isHint):
+            color = (255,255,0)
+            pygame.draw.rect(win, color, pygame.Rect(x, y, gap, gap),  2)
+
+
+def hint(win, board):
+    # Technique 1: Check value of cell vs flagged mines and number of unmarked cells around it
+    count = 0
+    for x in board.incomplete:
+        print(f" {(x.row, x.col)} + {board.unmarked_neighbors(x)}")
+        if x.value == board.unmarked_neighbors(x):
+            print((x.row, x.col))
+            print(board.unmarked_neighbors(x))
+            board.highlight(x)
+            count += 1
+
+
 
 
 def format_time(secs):
@@ -291,14 +401,18 @@ def redraw_window(win, board, time):
     # Draw time
     fnt = pygame.font.SysFont("arial", 40)
     text = fnt.render("Time: " + format_time(time), 1, (0,0,0))
-    win.blit(text, (10, 550))
+    win.blit(text, (10, 610))
     # Draw grid and board
+    if board.hinted:
+        fnt = pygame.font.SysFont("arial", 30)
+        text = fnt.render("Take a look at the highlighted cells!", 1, (255,255,0))
+        win.blit(text, (10, 560))
     if board.is_lost():
         text = fnt.render("You Lost!", 1, (255,0,0))
-        win.blit(text, (350, 550))
+        win.blit(text, (350, 610))
     elif board.is_won():
         text = fnt.render("You Won!", 1, (0,255,0))
-        win.blit(text, (350, 550))
+        win.blit(text, (350, 610))
     board.draw()
 
 
@@ -308,16 +422,31 @@ def main(argv):
     rows = int(sys.argv[1])
     cols = int(sys.argv[2])
     pygame.init()
-    win = pygame.display.set_mode((540,600))
+    win = pygame.display.set_mode((540,660))
     board = Grid(rows, cols, 540, 540, win)
     pygame.display.set_caption = 'Minesweeper'
     key = None
     run = True
     end = False
     start_time = time.time()
+    button = Button(
+        win, 
+        450, 
+        550, 
+        75, 
+        50, 
+        text='Hint',
+        fontSize=45, 
+        margin=20,
+        inactiveColour=(255, 255, 0),
+        hoverColour=(128, 255, 0),
+        pressedColour=(128, 128, 0), 
+        onClick=lambda: hint(win, board)
+     )
     while (run):
         round_time = round(time.time() - start_time)
-        for event in pygame.event.get():
+        events = pygame.event.get()
+        for event in events:
             if event.type == pygame.QUIT:
                 run = False
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -334,13 +463,13 @@ def main(argv):
                     board.start_game()
                 elif board.selected:
                     board.dig()
-
         if (board.is_lost()):
             board.end_game(0)
         elif (board.is_won()):
             board.end_game(1)
         if not(end):
             redraw_window(win, board, round_time)
+            pygame_widgets.update(events)
             pygame.display.update()
         if (board.completed):
             end = True
