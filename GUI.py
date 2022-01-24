@@ -50,7 +50,6 @@ class Grid:
     def dig(self):
         r = self.selected[0]
         c = self.selected[1]
-        self.cells[r][c].isHidden = False
         if not(self.cells[r][c].isMine):
             self.dig_neighbors((r,c))
         else:
@@ -209,7 +208,7 @@ class Grid:
     def is_lost(self):
         for i in range(self.rows):
             for j in range(self.cols):
-                if (self.cells[i][j].isMine == True and self.cells[i][j].isHidden == False): return True
+                if (self.cells[i][j].isMine == True and self.cells[i][j].isTriggered == True): return True
         return False
 
     def is_solved(self, pos):
@@ -376,13 +375,10 @@ class Cell:
 
 
 def hint(win, board):
-    # Technique 1: Check value of cell vs flagged mines and number of unmarked cells around it
+    # Technique 1: Check value of cell vs number of unmarked cells around it
     count = 0
     for x in board.incomplete:
-        print(f" {(x.row, x.col)} + {board.unmarked_neighbors(x)}")
         if x.value == board.unmarked_neighbors(x):
-            print((x.row, x.col))
-            print(board.unmarked_neighbors(x))
             board.highlight(x)
             count += 1
 
